@@ -9,9 +9,62 @@
 #include <time.h>
 #include <unistd.h>
 
+// ICMPヘッダ構造体（RFC792に準拠、最低限のフィールドのみ）
+// struct icmphdr {
+//   uint8_t type;      // メッセージタイプ（8: Echo, 0: Echo Reply）
+//   uint8_t code;      // コード（0固定）
+//   uint16_t checksum; // チェックサム
+//   union {
+//     struct {
+//       uint16_t id;       // 識別子（Identifier）
+//       uint16_t sequence; // シーケンス番号
+//     } echo;
+//     uint32_t gateway;
+//     struct {
+//       uint16_t __unused;
+//       uint16_t mtu;
+//     } frag;
+//   } un;
+// };
+// IPヘッダ構造体（最低限のフィールドのみ）
+// struct iphdr {
+//   uint8_t ihl : 4, version : 4;
+//   uint8_t tos;
+//   uint16_t tot_len;
+//   uint16_t id;
+//   uint16_t frag_off;
+//   uint8_t ttl;
+//   uint8_t protocol;
+//   uint16_t check;
+//   uint32_t saddr;
+//   uint32_t daddr;
+// };
+
 // ping_packet.c: ICMPパケットの送信・受信・チェックサム計算を担当するファイル
 // Echo Requestの送信とEcho
 // Replyの受信、RTT計算、統計情報の更新、チェックサム計算を行う
+
+// ICMP Echo/Echo Replyメッセージフォーマット
+// 0                   1                   2                   3
+// 0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1
+// +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+// |     Type      |     Code      |          Checksum             |
+// +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+// |           Identifier          |        Sequence Number        |
+// +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+// |     Data ...
+// +-+-+-+-+-
+//
+// Type: 8=Echo Request, 0=Echo Reply
+// Code: 0固定
+// Checksum: ICMPメッセージ全体の16ビット1の補数和の1の補数
+// Identifier: 要求と応答の対応付け用ID（通常はプロセスID）
+// Sequence Number: シーケンス番号
+// Data: 任意のデータ（RTT計測などに利用）
+//
+// IPヘッダの送信元アドレスはEcho Requestの宛先、Echo Replyでは逆転する
+//
+// 詳細: RFC792参照
 
 static unsigned short ping_checksum(void *b, int len) {
   // ICMPパケットのチェックサム計算
@@ -52,30 +105,37 @@ int send_ping(PingContext *ctx, int print_header,
     fprintf(stderr, "Maximum ping count reached\n");
     return -1;
   }
-  struct icmphdr icmp_hdr;
+  struct icmphdr icmp_hdr; // ICMPヘッダ（Type, Code, Checksum, Identifier,
+                           // Sequence Number）
   char packet[PACKET_SIZE];
-  char data[ICMP_DATA_SIZE]; // データ部バッファ
+  char data[ICMP_DATA_SIZE]; // データ部バッファ（RTT計測や任意データ格納）
 
   // ICMPヘッダ初期化
   memset(&icmp_hdr, 0, sizeof(icmp_hdr));
-  icmp_hdr.type = ICMP_ECHO;
-  icmp_hdr.code = 0;
-  icmp_hdr.un.echo.id = htons(getpid() & 0xFFFF);
-  icmp_hdr.un.echo.sequence = htons(ctx->packets_sent);
+  icmp_hdr.type = ICMP_ECHO; // Type: 8 (Echo Request)
+  icmp_hdr.code = 0;         // Code: 0固定
+  icmp_hdr.un.echo.id =
+      htons(getpid() & 0xFFFF); // Identifier: プロセスID下位16bit
+  icmp_hdr.un.echo.sequence =
+      htons(ctx->packets_sent); // Sequence Number: 送信回数
 
   // データ部初期化（全体を0埋め）
   memset(data, 0, sizeof(data));
   // 送信時刻を保存（RTT計算用）
   ctx->sent_times[ctx->packets_sent] = *timestamp;
+  memcpy(data, timestamp, sizeof(struct timespec));
 
   // パケットバッファ初期化・ヘッダ/データ部コピー
   memset(packet, 0, PACKET_SIZE);
-  memcpy(packet, &icmp_hdr, ICMP_HDRLEN); // 8バイト固定
-  memcpy(packet + ICMP_HDRLEN, data, ICMP_DATA_SIZE);
+  memcpy(packet, &icmp_hdr, ICMP_HDRLEN); // 8バイト固定: Type, Code, Checksum,
+                                          // Identifier, Sequence Number
+  memcpy(packet + ICMP_HDRLEN, data, ICMP_DATA_SIZE); // Data部
 
   // チェックサム計算
-  ((struct icmphdr *)packet)->checksum = 0;
-  ((struct icmphdr *)packet)->checksum = ping_checksum(packet, PACKET_SIZE);
+  // Checksum: ICMPメッセージ全体の16ビット1の補数和の1の補数
+  ((struct icmphdr *)packet)->checksum = 0; // 計算前に0クリア
+  ((struct icmphdr *)packet)->checksum =
+      ping_checksum(packet, PACKET_SIZE); // 計算結果をセット
 
   // 最初の1回だけヘッダ出力
   if (print_header) {
@@ -90,6 +150,7 @@ int send_ping(PingContext *ctx, int print_header,
   }
 
   // ICMPパケット送信
+  // IPヘッダの送信元アドレスはEcho Requestの宛先、Echo Replyでは逆転
   if (sendto(ctx->sock_fd, packet, PACKET_SIZE, 0, &ctx->dest_addr,
              sizeof(ctx->dest_addr)) < 0) {
     perror("sendto failed");
@@ -152,9 +213,13 @@ int receive_ping(PingContext *ctx) {
     return -1;
   }
 
-  icmp_hdr = (struct icmphdr *)(buffer + ip_hdr_len);
+  icmp_hdr =
+      (struct icmphdr *)(buffer +
+                         ip_hdr_len); // ICMPヘッダ（Type, Code, Checksum,
+                                      // Identifier, Sequence Number）
 
   // ICMPチェックサム検証
+  // Checksum: 受信時はフィールドを0にして再計算し、値が一致するか確認
   unsigned short received_checksum = icmp_hdr->checksum;
   icmp_hdr->checksum = 0; // チェックサム計算のため一時的に0に設定
   unsigned short calculated_checksum =
@@ -169,7 +234,7 @@ int receive_ping(PingContext *ctx) {
   // ICMP Echo Replyかつ自プロセスID宛か判定
   if (icmp_hdr->type == ICMP_ECHOREPLY &&
       ntohs(icmp_hdr->un.echo.id) == (getpid() & 0xFFFF)) {
-    int seq = ntohs(icmp_hdr->un.echo.sequence);
+    int seq = ntohs(icmp_hdr->un.echo.sequence); // Sequence Number
     if (seq < 0 || seq >= MAX_PINGS) {
       // 範囲外のシーケンス番号は無視
       return -1;
