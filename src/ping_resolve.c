@@ -19,12 +19,6 @@ int resolve_hostname(PingContext *ctx, const char *hostname) {
     return -1;
   }
 
-  // ホスト名の長さチェック（バッファオーバーフロー防止）
-  if (strlen(hostname) >= sizeof(ctx->dest_hostname)) {
-    printf("ping: hostname too long\n");
-    return -1;
-  }
-
   // dest_addrをstruct sockaddr_inとして適切にキャスト
   struct sockaddr_in *sin = (struct sockaddr_in *)&ctx->dest_addr;
 
@@ -38,14 +32,14 @@ int resolve_hostname(PingContext *ctx, const char *hostname) {
     // 安全な文字列コピー（snprintf使用）
     int ret = snprintf(ctx->dest_ip, sizeof(ctx->dest_ip), "%s", hostname);
     if ((size_t)ret >= sizeof(ctx->dest_ip) || ret < 0) {
-      printf("ping: IP address string too long\n");
+      printf("ft_ping: IP address string too long\n");
       return -1;
     }
 
     ret = snprintf(ctx->dest_hostname, sizeof(ctx->dest_hostname), "%s",
                    hostname);
     if ((size_t)ret >= sizeof(ctx->dest_hostname) || ret < 0) {
-      printf("ping: hostname string too long\n");
+      printf("ft_ping: hostname string too long\n");
       return -1;
     }
 
@@ -62,20 +56,22 @@ int resolve_hostname(PingContext *ctx, const char *hostname) {
   int err = getaddrinfo(hostname, NULL, &hints, &res);
   if (err != 0) {
     // gai_strerror()関数を用いて、エラーコードを人間に可読な文字列に変換
-    printf("ping: cannot resolve %s: %s\n", hostname, gai_strerror(err));
+    printf("ft_ping: cannot resolve %s: %s\n", hostname, gai_strerror(err));
+    freeaddrinfo(res);
     return -1;
   }
 
   // resがNULLでないことを確認（getaddrinfoが成功してもresがNULLの場合がある）
   if (res == NULL) {
-    printf("ping: cannot resolve %s: No address returned\n", hostname);
+    printf("ft_ping: cannot resolve %s: No address returned\n", hostname);
+    freeaddrinfo(res);
     return -1;
   }
 
   // 結果をstruct sockaddr_inにコピー（型安全性を確保）
   if (res->ai_addr->sa_family != AF_INET ||
       res->ai_addrlen != sizeof(struct sockaddr_in)) {
-    printf("ping: unexpected address family or size\n");
+    printf("ft_ping: unexpected address family or size\n");
     freeaddrinfo(res);
     return -1;
   }
@@ -86,7 +82,7 @@ int resolve_hostname(PingContext *ctx, const char *hostname) {
   // IPアドレス文字列を安全に作成
   if (inet_ntop(AF_INET, &sin->sin_addr, ctx->dest_ip, sizeof(ctx->dest_ip)) ==
       NULL) {
-    printf("ping: inet_ntop failed\n");
+    printf("ft_ping: inet_ntop failed\n");
     freeaddrinfo(res);
     return -1;
   }
@@ -95,7 +91,7 @@ int resolve_hostname(PingContext *ctx, const char *hostname) {
   int ret =
       snprintf(ctx->dest_hostname, sizeof(ctx->dest_hostname), "%s", hostname);
   if ((size_t)ret >= sizeof(ctx->dest_hostname) || ret < 0) {
-    printf("ping: hostname string too long\n");
+    printf("ft_ping: hostname string too long\n");
     freeaddrinfo(res);
     return -1;
   }

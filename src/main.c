@@ -128,17 +128,17 @@ int main(int argc, char *argv[]) {
   int verbose_mode = 0;
 
   if (initialize_context(&ctx) < 0) {
-    fprintf(stderr, "ping: failed to initialize context\n");
+    fprintf(stderr, "ft_ping: failed to initialize context\n");
     return EXIT_FAILURE;
   }
   if (parse_ping_args(argc, argv, hostname, &show_help, &verbose_mode) != 0) {
-    fprintf(stderr, "ping: missing host operand\nTry 'ping --help' or 'ping "
+    fprintf(stderr, "ft_ping: missing host operand\nTry 'ft_ping --help' or 'ft_ping "
                     "--usage' for more information.\n");
     return EXIT_FAILURE;
   }
   ctx.verbose_mode = verbose_mode;
   if (show_help) {
-    printf("Usage: ping [-v] <destination>\n");
+    printf("Usage: ft_ping [-v] <destination>\n");
     printf("Send ICMP ECHO_REQUEST packets to network hosts.\n");
     printf("\nOptions:\n");
     printf("  -v         verbose output\n");
