@@ -183,11 +183,16 @@ int receive_ping(PingContext *ctx) {
       char addr_str[INET_ADDRSTRLEN];
       inet_ntop(AF_INET, &((struct sockaddr_in *)&from)->sin_addr, addr_str,
                 sizeof(addr_str));
-      // verbose出力とnomal出力の違いはない
+
+      // 重複パケットのRTT計算
+      ts_sent = ctx->sent_times[seq];
+      rtt = (ts_recv.tv_sec - ts_sent.tv_sec) * 1000.0 +
+            (ts_recv.tv_nsec - ts_sent.tv_nsec) / 1000000.0;
+
       // ICMPペイロードサイズのみを表示（IPヘッダーを除く）
       int icmp_payload_size = bytes_received - ip_hdr_len;
-      printf("%d bytes from %s: icmp_seq=%d ttl=%d DUPLICATE\n", icmp_payload_size,
-             addr_str, seq + 1, ttl);
+      printf("%d bytes from %s: icmp_seq=%d ttl=%d time=%.3f ms (DUP!)\n",
+             icmp_payload_size, addr_str, seq, ttl, rtt);
       return 0;
     }
     ctx->received_seq[idx] |= (1 << bit);
@@ -218,12 +223,12 @@ int receive_ping(PingContext *ctx) {
     char addr_str[INET_ADDRSTRLEN];
     inet_ntop(AF_INET, &((struct sockaddr_in *)&from)->sin_addr, addr_str,
               sizeof(addr_str));
-    
+
     // verbose出力とnomal出力の違いはない
     // ICMPペイロードサイズのみを表示（IPヘッダーを除く）
     int icmp_payload_size = bytes_received - ip_hdr_len;
     printf("%d bytes from %s: icmp_seq=%d ttl=%d time=%.3f ms\n",
-           icmp_payload_size, addr_str, seq + 1, ttl, rtt);
+           icmp_payload_size, addr_str, seq, ttl, rtt);
     return 0;
   }
   return 0;
