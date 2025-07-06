@@ -16,6 +16,14 @@ tc qdisc add dev eth0 root netem corrupt 50%
 tc qdisc add dev eth0 root netem delay 100ms 10ms
 ```
 
+# パケット重複を発生させる設定
+
+```bash
+tc qdisc add dev eth0 root netem duplicate 10%
+```
+
+
+
 # 設定を確認
 
 ```bash
