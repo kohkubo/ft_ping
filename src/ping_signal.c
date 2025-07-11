@@ -1,9 +1,4 @@
-#include "ping.h"
-#include <math.h>
-#include <signal.h>
-#include <stdio.h>
-#include <stdlib.h>
-#include <unistd.h>
+#include "ping_signal.h"
 
 // シグナルセーフなフラグ（volatile sig_atomic_t型を使用）
 static volatile sig_atomic_t g_exit_flag = 0;

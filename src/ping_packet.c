@@ -1,13 +1,5 @@
 #define _POSIX_C_SOURCE 199309L
-#include "ping.h"
-#include <arpa/inet.h>
-#include <netinet/ip.h>
-#include <netinet/ip_icmp.h>
-#include <stdio.h>
-#include <string.h>
-#include <sys/time.h>
-#include <time.h>
-#include <unistd.h>
+#include "ping_packet.h"
 
 // ICMPヘッダ構造体（RFC792に準拠、最低限のフィールドのみ）
 // struct icmphdr {

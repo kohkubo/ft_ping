@@ -9,6 +9,8 @@
 #include <netinet/in.h>
 #include <time.h>
 #include <sys/time.h>
+#include <sys/select.h>
+#include <sys/socket.h>
 
 // ping全体で共通利用する定数や型定義
 #define ICMP_HDRLEN 8 // ICMPヘッダ長（バイト数、通常8バイト）

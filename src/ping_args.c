@@ -1,7 +1,4 @@
 #include "ping_args.h"
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
 
 #define MAX_HOSTNAME_LEN 255
 

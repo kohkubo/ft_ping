@@ -3,13 +3,7 @@
 #define _POSIX_C_SOURCE 199309L
 #endif
 
-#include "ping.h"
-#include <arpa/inet.h>
-#include <netdb.h>
-#include <stdio.h>
-#include <string.h>
-#include <sys/socket.h>
-#include <sys/types.h>
+#include "ping_resolve.h"
 
 // ping_resolve.c: ホスト名をIPアドレスに解決する処理を担当するファイル
 // IPアドレス文字列かどうか判定し、ホスト名の場合はDNS解決を行う

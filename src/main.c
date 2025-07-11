@@ -3,17 +3,6 @@
 #include "ping_packet.h"
 #include "ping_resolve.h"
 #include "ping_signal.h"
-#include <netinet/in.h>
-#include <netinet/ip_icmp.h>
-#include <signal.h>
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
-#include <sys/select.h>
-#include <sys/socket.h>
-#include <sys/time.h>
-#include <time.h>
-#include <unistd.h>
 
 static int initialize_context(PingContext *ctx);
 static int setup_signal_handlers(void);
