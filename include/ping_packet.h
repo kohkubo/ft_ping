@@ -3,6 +3,7 @@
 
 #include "ping.h"
 #include <time.h>
+#include <stdlib.h>
 
 
 int send_ping(PingContext *ctx, int print_header, const struct timespec *timestamp);
