@@ -31,6 +31,24 @@ static int initialize_context(PingContext *ctx) {
   ctx->ping_running = 1;
   ctx->sock_fd = -1;
   ctx->verbose_mode = 0;
+  
+  // 初期容量を設定
+  ctx->rtt_capacity = 64;
+  ctx->sent_times_capacity = 64;
+  ctx->received_seq_size = 8; // 256ビット分（64個のシーケンス番号まで対応）
+  
+  // 動的メモリ割り当て
+  ctx->rtt_times = malloc(ctx->rtt_capacity * sizeof(double));
+  ctx->sent_times = malloc(ctx->sent_times_capacity * sizeof(struct timespec));
+  ctx->received_seq = calloc(ctx->received_seq_size, sizeof(int));
+  
+  if (!ctx->rtt_times || !ctx->sent_times || !ctx->received_seq) {
+    free(ctx->rtt_times);
+    free(ctx->sent_times);
+    free(ctx->received_seq);
+    return -1;
+  }
+  
   return 0;
 }
 
@@ -73,8 +91,7 @@ static int run_ping_loop(PingContext *ctx) {
     return -1;
   }
 
-  while (ctx->ping_running && !get_exit_flag() &&
-         ctx->packets_sent < MAX_PINGS) {
+  while (ctx->ping_running && !get_exit_flag()) {
     fd_set read_fds;
     struct timeval timeout;
 
@@ -116,9 +133,20 @@ static int run_ping_loop(PingContext *ctx) {
 }
 
 static void cleanup_context(PingContext *ctx) {
-  if (ctx && ctx->sock_fd >= 0) {
-    close(ctx->sock_fd);
-    ctx->sock_fd = -1;
+  if (ctx) {
+    if (ctx->sock_fd >= 0) {
+      close(ctx->sock_fd);
+      ctx->sock_fd = -1;
+    }
+    
+    // 動的メモリを解放
+    free(ctx->rtt_times);
+    free(ctx->sent_times);
+    free(ctx->received_seq);
+    
+    ctx->rtt_times = NULL;
+    ctx->sent_times = NULL;
+    ctx->received_seq = NULL;
   }
 }
 int main(int argc, char *argv[]) {

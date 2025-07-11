@@ -95,14 +95,52 @@ static unsigned short ping_checksum(void *b, int len) {
   return result;
 }
 
+static int expand_arrays_if_needed(PingContext *ctx, int seq) {
+  // sent_times配列を拡張
+  if (seq >= ctx->sent_times_capacity) {
+    int new_capacity = ctx->sent_times_capacity * 2;
+    while (new_capacity <= seq) {
+      new_capacity *= 2;
+    }
+    struct timespec *new_sent_times = realloc(ctx->sent_times, new_capacity * sizeof(struct timespec));
+    if (!new_sent_times) {
+      return -1;
+    }
+    ctx->sent_times = new_sent_times;
+    ctx->sent_times_capacity = new_capacity;
+  }
+  
+  // received_seq配列を拡張
+  int required_size = (seq + 31) / 32 + 1;
+  if (required_size > ctx->received_seq_size) {
+    int new_size = ctx->received_seq_size * 2;
+    while (new_size < required_size) {
+      new_size *= 2;
+    }
+    int *new_received_seq = realloc(ctx->received_seq, new_size * sizeof(int));
+    if (!new_received_seq) {
+      return -1;
+    }
+    // 新しい領域を0で初期化
+    for (int i = ctx->received_seq_size; i < new_size; i++) {
+      new_received_seq[i] = 0;
+    }
+    ctx->received_seq = new_received_seq;
+    ctx->received_seq_size = new_size;
+  }
+  
+  return 0;
+}
+
 int send_ping(PingContext *ctx, int print_header,
               const struct timespec *timestamp) {
   if (!ctx || !timestamp) {
     return -1;
   }
 
-  if (ctx->packets_sent >= MAX_PINGS) {
-    fprintf(stderr, "Maximum ping count reached\n");
+  // 配列サイズを動的に拡張
+  if (expand_arrays_if_needed(ctx, ctx->packets_sent) < 0) {
+    fprintf(stderr, "Failed to expand arrays\n");
     return -1;
   }
   struct icmphdr icmp_hdr; // ICMPヘッダ（Type, Code, Checksum, Identifier,
@@ -235,8 +273,13 @@ int receive_ping(PingContext *ctx) {
   if (icmp_hdr->type == ICMP_ECHOREPLY &&
       ntohs(icmp_hdr->un.echo.id) == (getpid() & 0xFFFF)) {
     int seq = ntohs(icmp_hdr->un.echo.sequence); // Sequence Number
-    if (seq < 0 || seq >= MAX_PINGS) {
-      // 範囲外のシーケンス番号は無視
+    if (seq < 0) {
+      // 負のシーケンス番号は無視
+      return -1;
+    }
+    
+    // 配列サイズを動的に拡張（必要に応じて）
+    if (expand_arrays_if_needed(ctx, seq) < 0) {
       return -1;
     }
     int idx = seq / 32;
@@ -271,15 +314,24 @@ int receive_ping(PingContext *ctx) {
           (ts_recv.tv_nsec - ts_sent.tv_nsec) / 1000000.0;
 
     // RTT統計情報を更新
-    if (ctx->rtt_count < MAX_PINGS) {
-      ctx->rtt_times[ctx->rtt_count++] = rtt;
-      ctx->rtt_sum += rtt;
-      ctx->rtt_sum2 += rtt * rtt;
-      if (ctx->rtt_count == 1 || rtt < ctx->rtt_min)
-        ctx->rtt_min = rtt;
-      if (ctx->rtt_count == 1 || rtt > ctx->rtt_max)
-        ctx->rtt_max = rtt;
+    // RTT配列を拡張（必要に応じて）
+    if (ctx->rtt_count >= ctx->rtt_capacity) {
+      int new_capacity = ctx->rtt_capacity * 2;
+      double *new_rtt_times = realloc(ctx->rtt_times, new_capacity * sizeof(double));
+      if (!new_rtt_times) {
+        return -1;
+      }
+      ctx->rtt_times = new_rtt_times;
+      ctx->rtt_capacity = new_capacity;
     }
+    
+    ctx->rtt_times[ctx->rtt_count++] = rtt;
+    ctx->rtt_sum += rtt;
+    ctx->rtt_sum2 += rtt * rtt;
+    if (ctx->rtt_count == 1 || rtt < ctx->rtt_min)
+      ctx->rtt_min = rtt;
+    if (ctx->rtt_count == 1 || rtt > ctx->rtt_max)
+      ctx->rtt_max = rtt;
 
     // TTL値を取得
     ttl = ip_hdr->ttl;
